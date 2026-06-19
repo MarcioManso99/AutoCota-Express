@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Premium Gradient Background -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    
+    <!-- Premium Gloss Over */ -->
+    <linearGradient id="carGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+
+  <!-- Solid background for PWA Maskable Compliance (filling the full 512x512 square) -->
+  <rect width="512" height="512" fill="url(#bgGrad)" />
+
+  <!-- Subtle Ambient Glow -->
+  <circle cx="256" cy="256" r="180" fill="#06b6d4" opacity="0.1" filter="blur(40px)" />
+
+  <!-- Elegantly Designed Modern Car Silhouette and Safety Shield Details -->
+  <!-- Centered perfectly within the 80% safe zone (center 410px) -->
+  <g transform="translate(116, 136) scale(1.15)">
+    <!-- Sleek Modern Car Path -->
+    <path 
+      d="M38.2 110 L19.1 110 C8.6 110 0 101.4 0 90.9 L0 74.5 C0 69.5 2 64.7 5.6 61.2 L45.2 21.6 C51.3 15.5 59.6 12 68.3 12 L179.7 12 C188.4 12 196.7 15.5 202.8 21.6 L242.4 61.2 C246 64.7 248 69.5 248 74.5 L248 90.9 C248 101.4 239.4 110 228.9 110 L209.8 110" 
+      fill="none" 
+      stroke="url(#carGrad)" 
+      stroke-width="16" 
+      stroke-linecap="round" 
+      stroke-linejoin="round"
+    />
+    
+    <!-- Wheel arches and base connector -->
+    <path 
+      d="M74.8 110 L173.2 110" 
+      stroke="url(#carGrad)" 
+      stroke-width="16" 
+      stroke-linecap="round"
+    />
+
+    <!-- Left Wheel -->
+    <circle cx="56" cy="114" r="22" fill="#0f172a" stroke="url(#carGrad)" stroke-width="12" />
+    <circle cx="56" cy="114" r="6" fill="#38bdf8" />
+
+    <!-- Right Wheel -->
+    <circle cx="192" cy="114" r="22" fill="#0f172a" stroke="url(#carGrad)" stroke-width="12" />
+    <circle cx="192" cy="114" r="6" fill="#38bdf8" />
+
+    <!-- Sleek Highlights - Windshield & Window division -->
+    <path 
+      d="M51 58 L197 58" 
+      stroke="#1e293b" 
+      stroke-width="6" 
+      stroke-linecap="round"
+    />
+    
+    <!-- Cabin Roof Line -->
+    <path 
+      d="M68.3 22 L179.7 22 C184.2 22 188.4 24.1 191.1 27.6 L219 62 L29 62 L56.9 27.6 C59.6 24.1 63.8 22 68.3 22 Z" 
+      fill="#0f172a" 
+      opacity="0.85"
+    />
+    
+    <!-- Minimalist Cabin Divider -->
+    <line x1="124" y1="22" x2="124" y2="62" stroke="url(#carGrad)" stroke-width="6" stroke-linecap="round" />
+  </g>
+</svg>

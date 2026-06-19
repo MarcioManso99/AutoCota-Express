@@ -58,7 +58,14 @@ export function Header({ onGoToForm, showLinkOnly = false }: HeaderProps) {
               </a>
             </nav>
 
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("open-pwa-guide"))}
+                className="text-teal-700 bg-teal-50 border border-teal-200/50 hover:bg-teal-100 px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                title="Aprenda a instalar como um App limpo"
+              >
+                <span>📱 Instalar App</span>
+              </button>
               <button
                 onClick={onGoToForm}
                 className="bg-[#00236f] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-[#1e3a8a] transition-all active:scale-95 shadow-sm shadow-blue-900/10"
@@ -115,6 +122,15 @@ export function Header({ onGoToForm, showLinkOnly = false }: HeaderProps) {
           >
             Segurança
           </a>
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              window.dispatchEvent(new CustomEvent("open-pwa-guide"));
+            }}
+            className="w-full text-center py-2 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg text-sm font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
+          >
+            <span>📱 Instalar App Sem Marcas</span>
+          </button>
           <button
             onClick={() => {
               onGoToForm();

@@ -4,6 +4,7 @@ import { Footer } from "./components/Footer";
 import { FormScreen } from "./components/FormScreen";
 import { SuccessScreen } from "./components/SuccessScreen";
 import { AdminPanel } from "./components/AdminPanel";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { LeadForm } from "./types";
 
 const INITIAL_FORM_STATE: LeadForm = {
@@ -72,6 +73,9 @@ export default function App() {
 
       {/* Shared branding Footer */}
       <Footer onAdminClick={handleGoToAdmin} />
+
+      {/* Floating PWA Install Prompt banner */}
+      <InstallPrompt />
     </div>
   );
 }

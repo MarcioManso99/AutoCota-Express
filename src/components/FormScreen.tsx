@@ -177,6 +177,27 @@ export function FormScreen({ onSubmit, initialData }: FormScreenProps) {
         </div>
       </section>
 
+      {/* PWA App Banner Promotion */}
+      <div className="max-w-4xl mx-auto mb-6 bg-gradient-to-r from-teal-500/10 via-blue-500/5 to-transparent border border-teal-500/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-teal-500/10 text-teal-700 rounded-xl flex items-center justify-center shrink-0 text-lg">
+            📱
+          </div>
+          <div>
+            <h4 className="font-bold text-sm text-gray-800">Dica: Use como Aplicativo (Livre de Marcas)</h4>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Instale em segundos para rodar em tela cheia de forma lisa e ter o ícone limpo (sem o logo do Chrome ou "W" do WhatsApp)!
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("open-pwa-guide"))}
+          className="text-xs font-bold text-teal-800 bg-teal-500/20 hover:bg-teal-500/30 px-3.5 py-2 rounded-xl transition duration-150 shrink-0 self-start sm:self-center cursor-pointer"
+        >
+          Ver como Instalar ➔
+        </button>
+      </div>
+
       {/* Main Content & Form Field Segment */}
       <section className="bg-white rounded-2xl p-6 sm:p-10 border border-gray-100 shadow-xl shadow-blue-900/5 max-w-4xl mx-auto relative overflow-hidden" id="form">
         {/* Subtle top decoration */}

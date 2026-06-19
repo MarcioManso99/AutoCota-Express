@@ -150,8 +150,29 @@ export function SuccessScreen({ onReset, leadData }: SuccessScreenProps) {
           </div>
         </div>
 
+        {/* Dynamic Success PWA Promo Card */}
+        <div className="mt-8 p-5 bg-gradient-to-r from-teal-50/70 to-blue-50/40 border border-teal-500/20 rounded-2xl w-full text-left flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="text-[11px] font-extrabold text-teal-800 uppercase tracking-widest bg-teal-100 px-2 py-0.5 rounded-md">
+              Acesso Exclusivo
+            </span>
+            <h4 className="font-bold text-sm text-[#00236f] mt-1.5">
+              Instale o aplicativo limpo na tela inicial!
+            </h4>
+            <p className="text-xs text-gray-500 leading-relaxed max-w-md">
+              Acessou via WhatsApp ou Email? Abra pelo Safari ou Chrome nativos para instalar sem a logo de navegador ou letra "W" marcando o ícone do app.
+            </p>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-pwa-guide"))}
+            className="shrink-0 bg-[#00236f] hover:bg-[#1e3a8a] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+          >
+            Passo a Passo ➔
+          </button>
+        </div>
+
         {/* Action Buttons */}
-        <div className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+        <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <button 
             onClick={onReset}
             className="bg-[#00236f] text-white font-bold px-8 py-3.5 rounded-xl shadow-md shadow-blue-900/10 hover:bg-[#1e3a8a] active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"

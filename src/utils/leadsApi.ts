@@ -256,3 +256,43 @@ export async function deleteLead(id: string, password: string): Promise<boolean>
 
   return true;
 }
+
+export interface NotificationConfig {
+  telegramEnabled: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  discordEnabled: boolean;
+  discordWebhookUrl: string;
+}
+
+export async function fetchNotificationConfig(password: string): Promise<NotificationConfig> {
+  const response = await fetch("/api/notifications", {
+    method: "GET",
+    headers: {
+      "Authorization": password,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Não foi possível carregar as configurações de notificação.");
+  }
+
+  return response.json();
+}
+
+export async function saveNotificationConfig(config: NotificationConfig, password: string): Promise<boolean> {
+  const response = await fetch("/api/notifications", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": password,
+    },
+    body: JSON.stringify(config),
+  });
+
+  if (!response.ok) {
+    throw new Error("Não foi possível salvar as configurações de notificação.");
+  }
+
+  return true;
+}

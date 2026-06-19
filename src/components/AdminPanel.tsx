@@ -1,5 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { fetchLeads, updateLeadStatus, deleteLead, DBLead } from "../utils/leadsApi";
+import React, { useState, useEffect, useRef } from "react";
+import { 
+  fetchLeads, 
+  updateLeadStatus, 
+  deleteLead, 
+  DBLead,
+  NotificationConfig,
+  fetchNotificationConfig,
+  saveNotificationConfig
+} from "../utils/leadsApi";
 import { 
   Lock, 
   Trash2, 
@@ -17,7 +25,8 @@ import {
   RefreshCw,
   LogOut,
   Sliders,
-  Sparkles
+  Sparkles,
+  Bell
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -33,6 +42,128 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [adminPasscode, setAdminPasscode] = useState(""); // Stores successful passcode to auto-refetch
+
+  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig>({
+    telegramEnabled: false,
+    telegramBotToken: "",
+    telegramChatId: "",
+    discordEnabled: false,
+    discordWebhookUrl: "",
+  });
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
+
+  // Store previous leads IDs in a ref to check for completely new items on poll
+  const prevLeadsIdsRef = useRef<string[]>([]);
+
+  // Gentle chime synthesizer using Web Audio API (to avoid external file request issues)
+  const playAlertSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.15); // G5
+      
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.45);
+    } catch (e) {
+      console.warn("Could not play sound preview:", e);
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+      alert("Este navegador não suporta notificações de área de trabalho.");
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") {
+      setBrowserNotificationsEnabled(true);
+      new Notification("Notificações Ativas!", {
+        body: "Você começará a receber avisos visuais aqui quando novos leads chegarem!",
+        icon: "/app_icon_192.png"
+      });
+    } else {
+      alert("Permissão de notificações recusada. Ative nas permissões do site para receber avisos.");
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    if (!adminPasscode) return;
+    setIsSavingConfig(true);
+    try {
+      await saveNotificationConfig(notificationConfig, adminPasscode);
+      alert("Configurações de robôs salvas com sucesso!");
+    } catch (err) {
+      alert("Erro ao salvar configurações de notificação.");
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  // Initialize permission state
+  useEffect(() => {
+    if ("Notification" in window) {
+      setBrowserNotificationsEnabled(Notification.permission === "granted");
+    }
+  }, []);
+
+  // Initialize previous leads IDs helper
+  useEffect(() => {
+    if (leads.length > 0 && prevLeadsIdsRef.current.length === 0) {
+      prevLeadsIdsRef.current = leads.map(l => l.id);
+    }
+  }, [leads]);
+
+  // Periodic polling for new leads if authorized
+  useEffect(() => {
+    if (!isAuthenticated || !adminPasscode) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const freshLeads = await fetchLeads(adminPasscode);
+        
+        // Find if list has any completely new leads
+        if (prevLeadsIdsRef.current.length > 0) {
+          const freshIds = freshLeads.map(l => l.id);
+          const newLeadsFound = freshLeads.filter(l => !prevLeadsIdsRef.current.includes(l.id));
+          
+          if (newLeadsFound.length > 0) {
+            playAlertSound();
+            
+            if ("Notification" in window && Notification.permission === "granted") {
+              newLeadsFound.forEach(lead => {
+                new Notification("🚗 Novo Lead Recebido!", {
+                  body: `${lead.nomeCompleto} (${lead.modeloVeiculo}) acabou de simular!`,
+                  icon: "/app_icon_192.png"
+                });
+              });
+            }
+          }
+        }
+        
+        // Update both state and ref
+        setLeads(freshLeads);
+        prevLeadsIdsRef.current = freshLeads.map(l => l.id);
+      } catch (err) {
+        console.error("Erro na busca de leads periódico:", err);
+      }
+    }, 12000); // Poll every 12 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, adminPasscode]);
 
   // Auto-login if previously verified in session
   useEffect(() => {
@@ -58,6 +189,14 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       setIsAuthenticated(true);
       setAdminPasscode(passToVerify);
       sessionStorage.setItem("admin_password", passToVerify);
+
+      // Load Notification configuration automatically
+      try {
+        const config = await fetchNotificationConfig(passToVerify);
+        setNotificationConfig(config);
+      } catch (e) {
+        console.warn("Nenhuma configuração prévia de webhook cadastrada.");
+      }
     } catch (err: any) {
       setError("Senha administrativa incorreta. Tente novamente.");
       sessionStorage.removeItem("admin_password");
@@ -349,6 +488,19 @@ _Gerado via AutoCota Express em ${new Date(lead.createdAt).toLocaleDateString("p
               </button>
 
               <button
+                onClick={() => setShowNotificationSettings(!showNotificationSettings)}
+                className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 border ${
+                  showNotificationSettings
+                    ? "bg-teal-50 border-teal-300 text-teal-800"
+                    : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                }`}
+                title="Configurar Notificações e Webhooks"
+              >
+                <Bell className={`w-4 h-4 ${showNotificationSettings ? "animate-bounce" : ""}`} />
+                Configurar Alertas
+              </button>
+
+              <button
                 onClick={exportToCSV}
                 className="bg-[#00236f] hover:bg-[#1e3a8a] text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5"
                 id="btn-export-csv"
@@ -358,6 +510,160 @@ _Gerado via AutoCota Express em ${new Date(lead.createdAt).toLocaleDateString("p
               </button>
             </div>
           </div>
+
+          {/* Notification settings panel */}
+          {showNotificationSettings && (
+            <div className="bg-slate-50 border border-gray-200 rounded-2xl p-6 space-y-5 animate-fade-in">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-[#00236f] flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-teal-600" />
+                    Central de Canais e Notificações CotaExpress
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Evite perder prazos. Ative alertas em tempo real e integre robôs para receber avisos sobre cada nova cotação automaticamente!
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowNotificationSettings(false)}
+                  className="text-xs font-semibold text-gray-400 hover:text-gray-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shrink-0"
+                >
+                  Ocultar Ajustes
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-2">
+                
+                {/* 1. Browser Notification Options */}
+                <div className="bg-white p-5 rounded-xl border border-gray-150 flex flex-col justify-between space-y-4">
+                  <div className="space-y-1.5">
+                    <h4 className="font-bold text-sm text-slate-800">Alertas de Tela (Push) & Som no Navegador</h4>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Seu navegador soará um aviso sonoro (bipe) e exibirá uma notificação push do sistema operacional assim que novos leads entrarem no site (requer manter esta aba do painel aberta).
+                    </p>
+                  </div>
+                  
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    {browserNotificationsEnabled ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#006a61] bg-teal-50 px-3.5 py-2 rounded-xl border border-teal-200">
+                        ✓ Alertas do Navegador Ativos
+                      </span>
+                    ) : (
+                      <button
+                        onClick={requestNotificationPermission}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
+                      >
+                        🔔 Ativar Avisos do Navegador
+                      </button>
+                    )}
+                    <button
+                      onClick={playAlertSound}
+                      className="text-xs font-semibold text-gray-600 hover:text-teal-700 bg-gray-50 hover:bg-teal-50 border border-gray-200 hover:border-teal-200 px-3.5 py-2 rounded-xl transition-all"
+                    >
+                      🔊 Testar Som (Bipe)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Webhooks options */}
+                <div className="bg-white p-5 rounded-xl border border-gray-150 space-y-4">
+                  <h4 className="font-bold text-sm text-slate-800">Integrações de Segundo Plano (Robôs de Conversas)</h4>
+                  <div className="space-y-4">
+                    
+                    {/* Telegram */}
+                    <div className="border border-gray-100 p-3.5 rounded-xl bg-gray-50/50 space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={notificationConfig.telegramEnabled}
+                          onChange={(e) => setNotificationConfig({
+                            ...notificationConfig,
+                            telegramEnabled: e.target.checked
+                          })}
+                          className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <span className="text-xs font-extrabold text-slate-700">Ativar Notificações no Telegram</span>
+                      </label>
+                      {notificationConfig.telegramEnabled && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fade-in text-xs">
+                          <div>
+                            <span className="text-[10px] text-gray-400 font-bold block mb-1">BOT TOKEN (Ex: 12345:ABC...)</span>
+                            <input
+                              type="text"
+                              placeholder="Forncido pelo @BotFather"
+                              value={notificationConfig.telegramBotToken}
+                              onChange={(e) => setNotificationConfig({
+                                ...notificationConfig,
+                                telegramBotToken: e.target.value
+                              })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-400 font-bold block mb-1">CHAT ID (Ex: -100234...)</span>
+                            <input
+                              type="text"
+                              placeholder="Chat ID para receber"
+                              value={notificationConfig.telegramChatId}
+                              onChange={(e) => setNotificationConfig({
+                                ...notificationConfig,
+                                telegramChatId: e.target.value
+                              })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Discord */}
+                    <div className="border border-gray-100 p-3.5 rounded-xl bg-gray-50/50 space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={notificationConfig.discordEnabled}
+                          onChange={(e) => setNotificationConfig({
+                            ...notificationConfig,
+                            discordEnabled: e.target.checked
+                          })}
+                          className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <span className="text-xs font-extrabold text-slate-700">Ativar Notificações no Discord (Canal)</span>
+                      </label>
+                      {notificationConfig.discordEnabled && (
+                        <div className="animate-fade-in text-xs space-y-1">
+                          <span className="text-[10px] text-gray-400 font-bold block">DISCORD WEBHOOK URL</span>
+                          <input
+                            type="text"
+                            placeholder="URL gerada nas configurações do canal do seu servidor"
+                            value={notificationConfig.discordWebhookUrl}
+                            onChange={(e) => setNotificationConfig({
+                              ...notificationConfig,
+                              discordWebhookUrl: e.target.value
+                            })}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none placeholder:text-gray-300"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Save webhook config button */}
+              <div className="flex justify-end border-t border-gray-200 pt-4 gap-2">
+                <button
+                  onClick={handleSaveNotifications}
+                  disabled={isSavingConfig}
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSavingConfig ? "Salvando..." : "Salvar Configurações de Avisos"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Lead Table / Stack list */}
           <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm bg-white">
