@@ -208,11 +208,7 @@ export async function submitLead(lead: LeadForm): Promise<DBLead> {
 }
 
 export async function fetchLeads(password: string): Promise<DBLead[]> {
-  const storedPassword = await getStoredAdminPassword();
-  if (password !== storedPassword) {
-    throw new Error("Senha administrativa incorreta.");
-  }
-
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/leads?pageSize=100${firebaseApiKey ? `&key=${firebaseApiKey}` : ""}`;
@@ -225,19 +221,17 @@ export async function fetchLeads(password: string): Promise<DBLead[]> {
         return mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } else if (response.status === 404) {
         // If the leads collection is empty or doesn't exist yet, Firestore REST API returns 404.
-        // We should return an empty array gracefully instead of failing authentication.
         return [];
       } else {
-        console.error("Erro ao buscar dados do Firebase Firestore. Tentando fallback local...");
-        throw new Error("Não foi possível carregar os leads do Firestore.");
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando fallback local...`);
       }
     } catch (e: any) {
-      console.error("Falha ao comunicar com Firebase Firestore:", e);
-      throw e;
+      console.warn("Falha de conexão com o Firebase Firestore. Tentando fallback local...", e);
     }
   }
 
-  // Fallback to Express backend leads list
+  // 2. Try Local Express backend (which authenticates password dynamically)
   try {
     const response = await fetch("/api/leads", {
       method: "GET",
@@ -247,13 +241,27 @@ export async function fetchLeads(password: string): Promise<DBLead[]> {
     });
 
     if (response.ok) {
+      // Server authenticated successfully! Save password dynamically for offline fallbacks
+      localStorage.setItem("static_admin_password", password);
       return response.json();
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
+    } else {
+      console.warn(`Servidor retornou código ${response.status}. Tentando fallback offline...`);
     }
-  } catch (err) {
-    console.error("Erro no fallback do Express para leads:", err);
+  } catch (err: any) {
+    if (err.message === "Senha administrativa incorreta.") {
+      throw err;
+    }
+    console.warn("Erro ao buscar leads do servidor local. Usando fallback offline...", err);
   }
 
-  // LocalStorage fallback for pure offline static client
+  // 3. Fallback to localStorage offline checking
+  const storedPassword = await getStoredAdminPassword();
+  if (password !== storedPassword) {
+    throw new Error("Senha administrativa incorreta.");
+  }
+
   const localItems = localStorage.getItem("static_leads");
   if (localItems) {
     return JSON.parse(localItems);
@@ -262,11 +270,7 @@ export async function fetchLeads(password: string): Promise<DBLead[]> {
 }
 
 export async function updateLeadStatus(id: string, status: string, password: string): Promise<DBLead> {
-  const storedPassword = await getStoredAdminPassword();
-  if (password !== storedPassword) {
-    throw new Error("Senha administrativa incorreta.");
-  }
-
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/leads/${id}?updateMask.fieldPaths=status${firebaseApiKey ? `&key=${firebaseApiKey}` : ""}`;
@@ -282,18 +286,19 @@ export async function updateLeadStatus(id: string, status: string, password: str
         },
         body: JSON.stringify(firestoreBody)
       });
-      if (!response.ok) {
-        throw new Error("Falha ao atualizar no Firebase Firestore.");
+      if (response.ok) {
+        const data = await response.json();
+        return mapFirestoreDoc(data);
+      } else {
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando backend local...`);
       }
-      const data = await response.json();
-      return mapFirestoreDoc(data);
     } catch (e) {
-      console.error("Erro ao atualizar status no Firebase Firestore:", e);
-      throw e;
+      console.warn("Erro ao atualizar status no Firebase, tentando backend local...", e);
     }
   }
 
-  // Fallback to local server
+  // 2. Try local server (authenticates dynamically)
   try {
     const response = await fetch(`/api/leads/${id}`, {
       method: "PATCH",
@@ -306,12 +311,22 @@ export async function updateLeadStatus(id: string, status: string, password: str
 
     if (response.ok) {
       return response.json();
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
     }
-  } catch (err) {
-    console.error("Erro no update backend local:", err);
+  } catch (err: any) {
+    if (err.message === "Senha administrativa incorreta.") {
+      throw err;
+    }
+    console.warn("Erro no update backend local, tentando offline...", err);
   }
 
-  // Fallback to localStorage if pure client fallback
+  // 3. Fallback to offline localStorage
+  const storedPassword = await getStoredAdminPassword();
+  if (password !== storedPassword) {
+    throw new Error("Senha administrativa incorreta.");
+  }
+
   const localItems = localStorage.getItem("static_leads");
   if (localItems) {
     const list: DBLead[] = JSON.parse(localItems);
@@ -327,28 +342,25 @@ export async function updateLeadStatus(id: string, status: string, password: str
 }
 
 export async function deleteLead(id: string, password: string): Promise<boolean> {
-  const storedPassword = await getStoredAdminPassword();
-  if (password !== storedPassword) {
-    throw new Error("Senha administrativa incorreta.");
-  }
-
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/leads/${id}${firebaseApiKey ? `?key=${firebaseApiKey}` : ""}`;
       const response = await fetch(dbUrl, {
         method: "DELETE"
       });
-      if (!response.ok) {
-        throw new Error("Falha ao excluir lead no Firebase Firestore.");
+      if (response.ok) {
+        return true;
+      } else {
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando backend local...`);
       }
-      return true;
     } catch (e) {
-      console.error("Erro ao excluir lead do Firebase Firestore:", e);
-      throw e;
+      console.warn("Erro ao excluir lead do Firebase, tentando backend local...", e);
     }
   }
 
-  // Fallback to Local backend
+  // 2. Try Local backend (authenticates dynamically)
   try {
     const response = await fetch(`/api/leads/${id}`, {
       method: "DELETE",
@@ -359,12 +371,22 @@ export async function deleteLead(id: string, password: string): Promise<boolean>
 
     if (response.ok) {
       return true;
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
     }
-  } catch (e) {
-    console.error("Erro ao deletar no backend local:", e);
+  } catch (e: any) {
+    if (e.message === "Senha administrativa incorreta.") {
+      throw e;
+    }
+    console.warn("Erro ao deletar no backend local, tentando offline...", e);
   }
 
-  // Fallback to localStorage
+  // 3. Fallback to localStorage offline
+  const storedPassword = await getStoredAdminPassword();
+  if (password !== storedPassword) {
+    throw new Error("Senha administrativa incorreta.");
+  }
+
   const localItems = localStorage.getItem("static_leads");
   if (localItems) {
     const list: DBLead[] = JSON.parse(localItems);
@@ -385,11 +407,6 @@ export interface NotificationConfig {
 }
 
 export async function fetchNotificationConfig(password: string): Promise<NotificationConfig> {
-  const storedPassword = await getStoredAdminPassword();
-  if (password !== storedPassword) {
-    throw new Error("Senha administrativa incorreta.");
-  }
-
   const defaultConfig: NotificationConfig = {
     telegramEnabled: false,
     telegramBotToken: "",
@@ -398,6 +415,7 @@ export async function fetchNotificationConfig(password: string): Promise<Notific
     discordWebhookUrl: "",
   };
 
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/app_config/notifications${firebaseApiKey ? `?key=${firebaseApiKey}` : ""}`;
@@ -413,15 +431,17 @@ export async function fetchNotificationConfig(password: string): Promise<Notific
           discordWebhookUrl: fields.discordWebhookUrl?.stringValue || "",
         };
       } else if (response.status === 404) {
-        // Document doesn't exist yet, return default
         return defaultConfig;
+      } else {
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando backend local...`);
       }
     } catch (e) {
-      console.error("Erro ao buscar configurações de notificação do Firebase:", e);
+      console.warn("Erro ao buscar configurações de notificação do Firebase, tentando backend local...", e);
     }
   }
 
-  // Fallback to Express backend notifications
+  // 2. Try Express backend notifications (authenticates dynamically)
   try {
     const response = await fetch("/api/notifications", {
       method: "GET",
@@ -432,12 +452,22 @@ export async function fetchNotificationConfig(password: string): Promise<Notific
 
     if (response.ok) {
       return response.json();
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
     }
-  } catch (err) {
-    console.error("Erro no fetch notifications da API local:", err);
+  } catch (err: any) {
+    if (err.message === "Senha administrativa incorreta.") {
+      throw err;
+    }
+    console.warn("Erro no fetch notifications da API local, tentando offline...", err);
   }
 
-  // Fallback to localStorage
+  // 3. Fallback to localStorage offline checking
+  const storedPassword = await getStoredAdminPassword();
+  if (password !== storedPassword) {
+    throw new Error("Senha administrativa incorreta.");
+  }
+
   const localConfig = localStorage.getItem("static_notifications_config");
   if (localConfig) {
     return JSON.parse(localConfig);
@@ -447,11 +477,7 @@ export async function fetchNotificationConfig(password: string): Promise<Notific
 }
 
 export async function saveNotificationConfig(config: NotificationConfig, password: string): Promise<boolean> {
-  const storedPassword = await getStoredAdminPassword();
-  if (password !== storedPassword) {
-    throw new Error("Senha administrativa incorreta.");
-  }
-
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/app_config/notifications${firebaseApiKey ? `?key=${firebaseApiKey}` : ""}`;
@@ -473,16 +499,18 @@ export async function saveNotificationConfig(config: NotificationConfig, passwor
         body: JSON.stringify(firestoreBody)
       });
 
-      if (!response.ok) {
-        throw new Error("Falha ao salvar configurações de notificação no Firestore.");
+      if (response.ok) {
+        // Continue to sync locally
+      } else {
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando backend local...`);
       }
     } catch (e) {
-      console.error("Erro ao salvar configurações de notificação do Firebase:", e);
-      throw e;
+      console.warn("Erro ao salvar configurações do Firebase, tentando backend local...", e);
     }
   }
 
-  // Save to local Express storage
+  // 2. Try Express local backend (authenticates dynamically)
   try {
     const response = await fetch("/api/notifications", {
       method: "POST",
@@ -495,22 +523,28 @@ export async function saveNotificationConfig(config: NotificationConfig, passwor
 
     if (response.ok) {
       return true;
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
     }
-  } catch (err) {
-    console.error("Erro ao salvar no backend local:", err);
+  } catch (err: any) {
+    if (err.message === "Senha administrativa incorreta.") {
+      throw err;
+    }
+    console.warn("Erro ao salvar no backend local, tentando offline...", err);
   }
 
-  // Fallback to localStorage
-  localStorage.setItem("static_notifications_config", JSON.stringify(config));
-  return true;
-}
-
-export async function changeAdminPassword(newPassword: string, password: string): Promise<boolean> {
+  // 3. Fallback to localStorage offline
   const storedPassword = await getStoredAdminPassword();
   if (password !== storedPassword) {
     throw new Error("Senha administrativa incorreta.");
   }
 
+  localStorage.setItem("static_notifications_config", JSON.stringify(config));
+  return true;
+}
+
+export async function changeAdminPassword(newPassword: string, password: string): Promise<boolean> {
+  // 1. Try Firebase Firestore if configured
   if (firebaseProjectId) {
     try {
       const dbUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/admin_config/password${firebaseApiKey ? `?key=${firebaseApiKey}` : ""}`;
@@ -528,20 +562,18 @@ export async function changeAdminPassword(newPassword: string, password: string)
         body: JSON.stringify(firestoreBody)
       });
 
-      if (!response.ok) {
-        throw new Error("Falha ao atualizar a senha administrativa no Firestore.");
+      if (response.ok) {
+        localStorage.setItem("static_admin_password", newPassword);
+      } else {
+        const errText = await response.text().catch(() => "Erro desconhecido");
+        console.warn(`Firestore retornou status ${response.status}: ${errText}. Tentando backend local...`);
       }
-      
-      // Keep local overriding backup set
-      localStorage.setItem("static_admin_password", newPassword);
-      return true;
     } catch (e) {
-      console.error("Erro ao atualizar a senha administrativa no Firestore:", e);
-      throw e;
+      console.warn("Erro ao atualizar a senha administrativa no Firestore, tentando backend local...", e);
     }
   }
 
-  // Local backend update fallback
+  // 2. Try local server (authenticates dynamically)
   try {
     const response = await fetch("/api/admin/change-password", {
       method: "POST",
@@ -555,12 +587,22 @@ export async function changeAdminPassword(newPassword: string, password: string)
     if (response.ok) {
       localStorage.setItem("static_admin_password", newPassword);
       return true;
+    } else if (response.status === 401) {
+      throw new Error("Senha administrativa incorreta.");
     }
-  } catch (err) {
-    console.error("Erro alterando password local:", err);
+  } catch (err: any) {
+    if (err.message === "Senha administrativa incorreta.") {
+      throw err;
+    }
+    console.warn("Erro alterando password local, tratando offline...", err);
   }
 
-  // Fallback to localStorage
+  // 3. Fallback to localStorage offline
+  const storedPassword = await getStoredAdminPassword();
+  if (password !== storedPassword) {
+    throw new Error("Senha administrativa incorreta.");
+  }
+
   localStorage.setItem("static_admin_password", newPassword);
   return true;
 }
