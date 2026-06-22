@@ -247,7 +247,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         console.warn("Nenhuma configuração prévia de webhook cadastrada.");
       }
     } catch (err: any) {
-      setError("Senha administrativa incorreta. Tente novamente.");
+      setError(err.message || "Senha administrativa incorreta. Tente novamente.");
       sessionStorage.removeItem("admin_password");
     } finally {
       setLoading(false);

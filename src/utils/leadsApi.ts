@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { LeadForm } from "../types";
 
 export interface DBLead extends LeadForm {
@@ -7,11 +8,11 @@ export interface DBLead extends LeadForm {
 }
 
 // Check configuration for optional external datastores
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const firebaseProjectId = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID;
-const firebaseApiKey = (import.meta as any).env?.VITE_FIREBASE_API_KEY;
+const firebaseProjectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+const firebaseApiKey = import.meta.env.VITE_FIREBASE_API_KEY;
 
 // Map Firestore REST API response format back to clean DBLead interface
 function mapFirestoreDoc(doc: any): DBLead {
@@ -37,7 +38,7 @@ function mapFirestoreDoc(doc: any): DBLead {
 
 // Helper to get admin password dynamically on the static client (via Firestore or fallback)
 async function getStoredAdminPassword(): Promise<string> {
-  const defaultPassword = (import.meta as any).env?.VITE_ADMIN_PASSWORD || "admin123";
+  const defaultPassword = import.meta.env.VITE_ADMIN_PASSWORD || "admin123";
   
   // Check localStorage first (client level override/persistence)
   const localSaved = localStorage.getItem("static_admin_password");
@@ -222,6 +223,10 @@ export async function fetchLeads(password: string): Promise<DBLead[]> {
         // Sort leads by createdAt descending on client side
         const mapped = docs.map(mapFirestoreDoc);
         return mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } else if (response.status === 404) {
+        // If the leads collection is empty or doesn't exist yet, Firestore REST API returns 404.
+        // We should return an empty array gracefully instead of failing authentication.
+        return [];
       } else {
         console.error("Erro ao buscar dados do Firebase Firestore. Tentando fallback local...");
         throw new Error("Não foi possível carregar os leads do Firestore.");
