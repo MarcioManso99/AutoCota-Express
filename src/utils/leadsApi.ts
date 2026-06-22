@@ -296,3 +296,21 @@ export async function saveNotificationConfig(config: NotificationConfig, passwor
 
   return true;
 }
+
+export async function changeAdminPassword(newPassword: string, password: string): Promise<boolean> {
+  const response = await fetch("/api/admin/change-password", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": password,
+    },
+    body: JSON.stringify({ newPassword }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
+    throw new Error(errorData.error || "Não foi possível atualizar a senha administrativa.");
+  }
+
+  return true;
+}

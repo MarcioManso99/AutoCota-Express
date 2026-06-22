@@ -8,6 +8,33 @@ async function startServer() {
   const PORT = 3000;
   const LEADS_FILE = path.join(process.cwd(), "leads.json");
   const CONFIG_FILE = path.join(process.cwd(), "notification_settings.json");
+  const ADMIN_PASS_FILE = path.join(process.cwd(), "admin_config.json");
+
+  // Helper to read current admin password
+  const getAdminPassword = (): string => {
+    try {
+      if (fs.existsSync(ADMIN_PASS_FILE)) {
+        const fileContent = fs.readFileSync(ADMIN_PASS_FILE, "utf-8");
+        const config = JSON.parse(fileContent);
+        if (config && config.adminPassword) {
+          return config.adminPassword;
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao ler admin_config.json:", e);
+    }
+    return process.env.ADMIN_PASSWORD || "admin123";
+  };
+
+  // Helper to update admin password
+  const setAdminPassword = (newPassword: string): void => {
+    try {
+      fs.writeFileSync(ADMIN_PASS_FILE, JSON.stringify({ adminPassword: newPassword }, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Erro ao gravar admin_config.json:", e);
+      throw new Error("Não foi possível persistir a nova senha.");
+    }
+  };
 
   interface NotificationConfig {
     telegramEnabled: boolean;
@@ -148,7 +175,7 @@ async function startServer() {
   // API Routes
   app.get("/api/leads", (req, res) => {
     const password = req.headers.authorization;
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const expectedPassword = getAdminPassword();
 
     if (password !== expectedPassword) {
       return res.status(401).json({ error: "Senha inválida ou ausente no cabeçalho Authorization" });
@@ -198,7 +225,7 @@ async function startServer() {
     const { id } = req.params;
     const { status } = req.body;
     const password = req.headers.authorization;
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const expectedPassword = getAdminPassword();
 
     if (password !== expectedPassword) {
       return res.status(401).json({ error: "Não autorizado" });
@@ -220,7 +247,7 @@ async function startServer() {
   app.delete("/api/leads/:id", (req, res) => {
     const { id } = req.params;
     const password = req.headers.authorization;
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const expectedPassword = getAdminPassword();
 
     if (password !== expectedPassword) {
       return res.status(401).json({ error: "Não autorizado" });
@@ -241,7 +268,7 @@ async function startServer() {
   // Notifications Config GET API
   app.get("/api/notifications", (req, res) => {
     const password = req.headers.authorization;
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const expectedPassword = getAdminPassword();
 
     if (password !== expectedPassword) {
       return res.status(401).json({ error: "Não autorizado" });
@@ -254,7 +281,7 @@ async function startServer() {
   // Notifications Config POST API
   app.post("/api/notifications", (req, res) => {
     const password = req.headers.authorization;
-    const expectedPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const expectedPassword = getAdminPassword();
 
     if (password !== expectedPassword) {
       return res.status(401).json({ error: "Não autorizado" });
@@ -267,6 +294,28 @@ async function startServer() {
 
     writeConfig(newConfig);
     res.json({ success: true, config: newConfig });
+  });
+
+  // Change Admin Password API
+  app.post("/api/admin/change-password", (req, res) => {
+    const password = req.headers.authorization;
+    const expectedPassword = getAdminPassword();
+
+    if (password !== expectedPassword) {
+      return res.status(401).json({ error: "Não autorizado" });
+    }
+
+    const { newPassword } = req.body;
+    if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length === 0) {
+      return res.status(400).json({ error: "Dados inválidos ou senha vazia." });
+    }
+
+    try {
+      setAdminPassword(newPassword.trim());
+      res.json({ success: true, message: "Senha de administrador atualizada com sucesso!" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Falha ao gravar nova senha." });
+    }
   });
 
   // Vite middleware for development

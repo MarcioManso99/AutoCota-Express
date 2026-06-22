@@ -1,6 +1,0 @@
-{
-  "name": "AutoCota Express",
-  "description": "Plataforma de pré-cadastro rápido para cotação de seguro auto em parceria com corretores oficiais.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

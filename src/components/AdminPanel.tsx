@@ -6,7 +6,8 @@ import {
   DBLead,
   NotificationConfig,
   fetchNotificationConfig,
-  saveNotificationConfig
+  saveNotificationConfig,
+  changeAdminPassword
 } from "../utils/leadsApi";
 import { 
   Lock, 
@@ -53,6 +54,13 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
+
+  // States for updating the admin password
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState("");
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Store previous leads IDs in a ref to check for completely new items on poll
   const prevLeadsIdsRef = useRef<string[]>([]);
@@ -110,6 +118,47 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       alert("Erro ao salvar configurações de notificação.");
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  const handlePasswordChangeSubmit = async () => {
+    if (!newAdminPassword.trim()) {
+      setPasswordChangeMessage("A nova senha não pode estar vazia.");
+      return;
+    }
+    if (newAdminPassword !== confirmAdminPassword) {
+      setPasswordChangeMessage("As senhas digitadas não coincidem.");
+      return;
+    }
+    if (newAdminPassword.length < 4) {
+      setPasswordChangeMessage("A senha é muito curta. Use no mínimo 4 caracteres.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setPasswordChangeMessage("");
+
+    try {
+      await changeAdminPassword(newAdminPassword, adminPasscode);
+      
+      // Update our current session with the new password
+      setAdminPasscode(newAdminPassword);
+      setPassword(newAdminPassword);
+      sessionStorage.setItem("admin_password", newAdminPassword);
+      
+      setPasswordChangeMessage("✓ Senha de administrador alterada com sucesso!");
+      setNewAdminPassword("");
+      setConfirmAdminPassword("");
+      
+      // Auto close after 2 seconds
+      setTimeout(() => {
+        setShowPasswordChange(false);
+        setPasswordChangeMessage("");
+      }, 2000);
+    } catch (err: any) {
+      setPasswordChangeMessage(err.message || "Erro ao atualizar a senha administrativa.");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -488,7 +537,10 @@ _Gerado via AutoCota Express em ${new Date(lead.createdAt).toLocaleDateString("p
               </button>
 
               <button
-                onClick={() => setShowNotificationSettings(!showNotificationSettings)}
+                onClick={() => {
+                  setShowNotificationSettings(!showNotificationSettings);
+                  setShowPasswordChange(false);
+                }}
                 className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 border ${
                   showNotificationSettings
                     ? "bg-teal-50 border-teal-300 text-teal-800"
@@ -501,6 +553,22 @@ _Gerado via AutoCota Express em ${new Date(lead.createdAt).toLocaleDateString("p
               </button>
 
               <button
+                onClick={() => {
+                  setShowPasswordChange(!showPasswordChange);
+                  setShowNotificationSettings(false);
+                }}
+                className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 border ${
+                  showPasswordChange
+                    ? "bg-amber-50 border-amber-300 text-amber-800"
+                    : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                }`}
+                title="Alterar Senha de Administrador"
+              >
+                <Lock className={`w-4 h-4 ${showPasswordChange ? "animate-pulse" : ""}`} />
+                Alterar Senha
+              </button>
+
+              <button
                 onClick={exportToCSV}
                 className="bg-[#00236f] hover:bg-[#1e3a8a] text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5"
                 id="btn-export-csv"
@@ -510,6 +578,74 @@ _Gerado via AutoCota Express em ${new Date(lead.createdAt).toLocaleDateString("p
               </button>
             </div>
           </div>
+
+          {/* Change password panel */}
+          {showPasswordChange && (
+            <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-6 space-y-4 animate-fade-in mb-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-[#00236f] flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-amber-600" />
+                    Alterar Senha Administrativa
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Defina uma nova credencial segura para acessar o Painel de Administração Integrado.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowPasswordChange(false)}
+                  className="text-xs font-semibold text-gray-400 hover:text-gray-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shrink-0"
+                >
+                  Ocultar Painel
+                </button>
+              </div>
+
+              <div className="max-w-md pt-2">
+                <div className="space-y-4 mb-4">
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1">Nova Senha Administrativa</label>
+                    <input
+                      type="password"
+                      placeholder="Mínimo de 4 caracteres"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="w-full px-3.5 py-2 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#00236f] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      placeholder="Repita a nova senha desejada"
+                      value={confirmAdminPassword}
+                      onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                      className="w-full px-3.5 py-2 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#00236f] text-sm"
+                    />
+                  </div>
+                </div>
+
+                {passwordChangeMessage && (
+                  <div className={`p-3 rounded-xl mb-4 text-xs font-bold leading-relaxed border ${
+                    passwordChangeMessage.includes("sucesso")
+                      ? "bg-teal-50 border-teal-200 text-teal-800"
+                      : "bg-red-50 border-red-200 text-red-800"
+                  }`}>
+                    {passwordChangeMessage}
+                  </div>
+                )}
+
+                <div className="flex justify-start">
+                  <button
+                    onClick={handlePasswordChangeSubmit}
+                    disabled={isChangingPassword || !newAdminPassword || !confirmAdminPassword}
+                    className="bg-[#00236f] hover:bg-[#1e3a8a] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all disabled:opacity-50"
+                  >
+                    {isChangingPassword ? "Salvando..." : "Confirmar Nova Senha"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Notification settings panel */}
           {showNotificationSettings && (
