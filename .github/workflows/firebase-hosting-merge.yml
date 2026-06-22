@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - main
+permissions:
+  checks: write
+  contents: read
+  deployments: write
 jobs:
   deploy_to_firebase:
     runs-on: ubuntu-latest
